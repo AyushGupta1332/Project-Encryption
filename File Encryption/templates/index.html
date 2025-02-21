@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure File Encryption</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+            </div>
+            <h1>Welcome</h1>
+            <p>Military-grade encryption for your sensitive files</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="encrypt">
+                <i class="fas fa-lock"></i> Encrypt
+            </button>
+            <button class="tab-btn" data-tab="decrypt">
+                <i class="fas fa-unlock"></i> Decrypt
+            </button>
+        </div>
+
+        <div class="tab-content active" id="encrypt-tab">
+            <div class="form-section">
+                <form id="encryptForm" class="drop-zone">
+                    <div class="upload-area">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <p>Drag & drop files here or click to browse</p>
+                        <input type="file" id="encryptFiles" name="files" multiple hidden>
+                    </div>
+                    <div class="selected-files"></div>
+                    <button type="submit" class="submit-btn">
+                        <i class="fas fa-lock"></i> Encrypt Files
+                    </button>
+                </form>
+            </div>
+            
+            <div class="result-section" style="display: none;">
+                <h3>Encryption Complete</h3>
+                <div class="key-section">
+                    <p>Your encryption key:</p>
+                    <div class="key-display">
+                        <input type="text" id="encryptionKey" readonly>
+                        <button class="copy-btn" data-clipboard-target="#encryptionKey">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                    <p class="key-warning">Save this key securely. You'll need it to decrypt your files.</p>
+                </div>
+                <div class="file-list"></div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="decrypt-tab">
+            <div class="form-section">
+                <form id="decryptForm" class="drop-zone">
+                    <div class="upload-area">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <p>Drag & drop encrypted files here or click to browse</p>
+                        <input type="file" id="decryptFiles" name="file" multiple hidden>
+                    </div>
+                    <div class="key-input">
+                        <input type="text" id="decryptionKey" name="key" required placeholder="Enter your decryption key">
+                    </div>
+                    <div class="selected-files"></div>
+                    <button type="submit" class="submit-btn">
+                        <i class="fas fa-unlock"></i> Decrypt Files
+                    </button>
+                </form>
+            </div>
+            
+            <div class="result-section" style="display: none;">
+                <h3>Decryption Complete</h3>
+                <div class="file-list"></div>
+            </div>
+        </div>
+
+        <div class="toast" style="display: none;">
+            <div class="toast-content">
+                <i class="fas fa-check-circle"></i>
+                <span class="toast-message"></span>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.8/clipboard.min.js"></script>
+    <script>
+        // Initialize clipboard.js
+        new ClipboardJS('.copy-btn');
+
+        // Tab switching functionality
+        document.querySelectorAll('.tab-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+                
+                button.classList.add('active');
+                document.getElementById(`${button.dataset.tab}-tab`).classList.add('active');
+            });
+        });
+
+        // Drag and drop functionality
+        document.querySelectorAll('.drop-zone').forEach(dropZone => {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => dropZone.classList.add('drag-over'), false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => dropZone.classList.remove('drag-over'), false);
+            });
+
+            dropZone.addEventListener('drop', handleDrop, false);
+        });
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            const form = this.closest('form');
+            const fileInput = form.querySelector('input[type="file"]');
+            fileInput.files = files;
+            updateFileList(form);
+        }
+
+        // File selection handling
+        document.querySelectorAll('input[type="file"]').forEach(input => {
+            input.addEventListener('change', () => updateFileList(input.form));
+        });
+
+        document.querySelectorAll('.upload-area').forEach(area => {
+            area.addEventListener('click', () => {
+                area.closest('form').querySelector('input[type="file"]').click();
+            });
+        });
+
+        function updateFileList(form) {
+            const files = form.querySelector('input[type="file"]').files;
+            const fileList = form.querySelector('.selected-files');
+            fileList.innerHTML = '';
+            
+            Array.from(files).forEach(file => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <i class="fas fa-file"></i>
+                    <span>${file.name}</span>
+                    <span class="file-size">${(file.size / 1024).toFixed(1)} KB</span>
+                `;
+                fileList.appendChild(fileItem);
+            });
+        }
+
+        // Form submission handling
+        document.getElementById('encryptForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            
+            try {
+                const response = await fetch('/encrypt', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    document.querySelector('#encrypt-tab .result-section').style.display = 'block';
+                    document.getElementById('encryptionKey').value = result.key;
+                    
+                    const fileList = document.querySelector('#encrypt-tab .file-list');
+                    fileList.innerHTML = '';
+                    result.files.forEach(file => {
+                        fileList.innerHTML += `
+                            <div class="file-item">
+                                <i class="fas fa-file-alt"></i>
+                                <span>${file.name}</span>
+                                <span class="file-size">${file.size}</span>
+                            </div>
+                        `;
+                    });
+                    
+                    showToast('Files encrypted successfully!');
+                } else {
+                    showToast('Error: ' + result.message, 'error');
+                }
+            } catch (error) {
+                showToast('Error processing request', 'error');
+            }
+        });
+
+        document.getElementById('decryptForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            
+            try {
+                const response = await fetch('/decrypt', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    document.querySelector('#decrypt-tab .result-section').style.display = 'block';
+                    
+                    const fileList = document.querySelector('#decrypt-tab .file-list');
+                    fileList.innerHTML = '';
+                    result.files.forEach(file => {
+                        fileList.innerHTML += `
+                            <div class="file-item">
+                                <i class="fas fa-file-alt"></i>
+                                <span>${file.name}</span>
+                                <span class="file-size">${file.size}</span>
+                            </div>
+                        `;
+                    });
+                    
+                    showToast('Files decrypted successfully!');
+                } else {
+                    showToast('Error: ' + result.message, 'error');
+                }
+            } catch (error) {
+                showToast('Error processing request', 'error');
+            }
+        });
+
+        function showToast(message, type = 'success') {
+            const toast = document.querySelector('.toast');
+            const toastMessage = toast.querySelector('.toast-message');
+            const icon = toast.querySelector('i');
+            
+            toastMessage.textContent = message;
+            icon.className = type === 'success' ? 'fas fa-check-circle' : 'fas fa-exclamation-circle';
+            toast.className = `toast ${type}`;
+            
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+
+        // Copy button functionality
+        document.querySelector('.copy-btn').addEventListener('click', function() {
+            showToast('Key copied to clipboard!');
+        });
+    </script>
+</body>
+</html>
